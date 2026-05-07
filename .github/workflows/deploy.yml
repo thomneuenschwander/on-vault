@@ -3,7 +3,12 @@ name: Deploy
 on:
   push:
     branches: [main]
-  workflow_dispatch: # manual trigger to rebuild with updated notes
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: 'Reason (e.g. "notes synced")'
+        required: false
+        default: 'manual rebuild'
 
 jobs:
   deploy:
@@ -14,30 +19,35 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
-          cache: npm
+          node-version: '20'
+          cache: 'npm'
 
       - name: Install dependencies
         run: npm ci
 
-      - name: Build
+      - name: Install Vercel CLI
+        run: npm install --global vercel@latest
+
+      # Downloads production env vars from Vercel dashboard into
+      # .vercel/.env.production.local so that `vercel build` picks them up.
+      # This is how Google credentials stay in one place (Vercel only) —
+      # they are never duplicated as GitHub secrets.
+      - name: Pull Vercel environment
+        run: vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
         env:
-          GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
-        run: npm run build
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
 
-      # --- Replace below with your platform ---
+      # Runs the project's build command (fetch-content → fumadocs-mdx → next build)
+      # using the env vars pulled above. Output goes to .vercel/output/.
+      - name: Build
+        run: vercel build --prod --token=${{ secrets.VERCEL_TOKEN }}
+        env:
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
 
-      # Option A: Vercel
-      # - name: Deploy to Vercel
-      #   uses: amondnet/vercel-action@v25
-      #   with:
-      #     vercel-token: ${{ secrets.VERCEL_TOKEN }}
-      #     vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
-      #     vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID }}
-      #     vercel-args: --prod
-
-      # Option B: GitHub Pages
-      # - uses: actions/upload-pages-artifact@v3
-      #   with:
-      #     path: out   # requires `output: 'export'` in next.config.mjs
-      # - uses: actions/deploy-pages@v4
+      - name: Deploy
+        run: vercel deploy --prebuilt --prod --token=${{ secrets.VERCEL_TOKEN }}
+        env:
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}

@@ -8,8 +8,9 @@ function loadOnVaultConfig() {
 }
 
 const vaultConfig = loadOnVaultConfig();
-const basePath = vaultConfig?.site?.base_path ?? 'docs';
-const siteTitle = vaultConfig?.site?.title ?? 'on-vault';
+// Env vars take priority — allows Vercel/CI to configure without on-vault.yaml
+const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? vaultConfig?.site?.base_path ?? 'docs';
+const siteTitle = process.env.NEXT_PUBLIC_SITE_TITLE ?? vaultConfig?.site?.title ?? 'on-vault';
 
 const withMDX = createMDX();
 
