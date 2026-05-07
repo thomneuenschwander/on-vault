@@ -1,9 +1,23 @@
 import { defineConfig, defineDocs, frontmatterSchema, metaSchema } from 'fumadocs-mdx/config';
+import { load } from 'js-yaml';
+import { readFileSync, existsSync } from 'fs';
+import remarkMath from 'remark-math';
+import rehypeKatex from 'rehype-katex';
 
-// You can customise Zod schemas for frontmatter and `meta.json` here
-// see https://fumadocs.dev/docs/mdx/collections
+function getBasePath(): string {
+  try {
+    if (!existsSync('on-vault.yaml')) return 'docs';
+    const config = load(readFileSync('on-vault.yaml', 'utf-8')) as any;
+    return config?.site?.base_path ?? 'docs';
+  } catch {
+    return 'docs';
+  }
+}
+
+const basePath = getBasePath();
+
 export const docs = defineDocs({
-  dir: 'content/docs',
+  dir: `content/${basePath}`,
   docs: {
     schema: frontmatterSchema,
     postprocess: {
@@ -17,6 +31,7 @@ export const docs = defineDocs({
 
 export default defineConfig({
   mdxOptions: {
-    // MDX options
+    remarkPlugins: [remarkMath],
+    rehypePlugins: (v) => [rehypeKatex, ...v],
   },
 });

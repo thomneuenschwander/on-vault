@@ -2,9 +2,10 @@ import { docs } from 'fumadocs-mdx:collections/server';
 import { type InferPageType, loader } from 'fumadocs-core/source';
 import { lucideIconsPlugin } from 'fumadocs-core/source/lucide-icons';
 
-// See https://fumadocs.dev/docs/headless/source-api for more info
+const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? 'docs';
+
 export const source = loader({
-  baseUrl: '/docs',
+  baseUrl: `/${basePath}`,
   source: docs.toFumadocsSource(),
   plugins: [lucideIconsPlugin()],
 });

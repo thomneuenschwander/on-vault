@@ -4,6 +4,16 @@
 # generated content
 .source
 
+# vault content - generated at build time from Google Drive
+# matches content/{base_path}/ for any configured base_path
+content/*/
+
+# temp vault cache used by fetch-content script
+.vault-cache/
+
+# vault assets copied to public/ by fumadocs-obsidian
+public/vault/
+
 # test & build
 /coverage
 /.next/
@@ -20,7 +30,11 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
-# others
+# env
+.env
 .env*.local
 .vercel
 next-env.d.ts
+
+# user config (copy from on-vault.yaml.example and fill in)
+on-vault.yaml

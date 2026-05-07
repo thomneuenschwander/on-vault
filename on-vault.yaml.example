@@ -1,0 +1,16 @@
+site:
+  title: My Knowledge Base
+  # Controls the URL prefix (/docs/*, /notes/*, etc.) and content folder (content/docs/)
+  base_path: docs
+
+vault:
+  # Absolute path or ~ path to your local Obsidian vault
+  path: ~/Documents/MyVault
+  # Sync .obsidian/ settings folder (plugins, themes, hotkeys) — useful for
+  # multi-machine setups. workspace.json is always excluded (UI state only).
+  # sync_config: false
+
+google_drive:
+  # ID of the Google Drive folder to sync your vault with
+  # Find it in the URL when you open the folder: drive.google.com/drive/folders/<folder_id>
+  folder_id: YOUR_GOOGLE_DRIVE_FOLDER_ID
