@@ -29,8 +29,7 @@ jobs:
         run: npm install --global vercel@latest
 
       # Downloads production env vars from Vercel dashboard into
-      # .vercel/.env.production.local so that `vercel build` picks them up.
-      # This is how Google credentials stay in one place (Vercel only) —
+      # .vercel/.env.production.local. Google credentials live only in Vercel —
       # they are never duplicated as GitHub secrets.
       - name: Pull Vercel environment
         run: vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
@@ -38,8 +37,13 @@ jobs:
           VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
           VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
 
+      # vercel build running outside Vercel infrastructure does not inject
+      # the pulled vars into child processes automatically — export them first.
+      - name: Inject Vercel env vars into runner
+        run: grep -v '^#' .vercel/.env.production.local | grep '=' >> $GITHUB_ENV
+
       # Runs the project's build command (fetch-content → fumadocs-mdx → next build)
-      # using the env vars pulled above. Output goes to .vercel/output/.
+      # using the env vars injected above. Output goes to .vercel/output/.
       - name: Build
         run: vercel build --prod --token=${{ secrets.VERCEL_TOKEN }}
         env:
