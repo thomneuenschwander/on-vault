@@ -34,5 +34,10 @@ export default defineConfig({
   mdxOptions: {
     remarkPlugins: [remarkMath],
     rehypePlugins: (v) => [rehypeKatex, ...v],
+    // Prevent remarkImage from converting relative image paths to static module
+    // imports — imported MDX files resolve to React components (functions), which
+    // can't be passed as `src` across the Server→Client boundary to next/image.
+    // All vault images use absolute /vault/... URLs so static imports aren't needed.
+    remarkImageOptions: { useImport: false },
   },
 });
