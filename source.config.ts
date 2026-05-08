@@ -5,6 +5,7 @@ import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
 
 function getBasePath(): string {
+  if (process.env.NEXT_PUBLIC_BASE_PATH) return process.env.NEXT_PUBLIC_BASE_PATH;
   try {
     if (!existsSync('on-vault.yaml')) return 'docs';
     const config = load(readFileSync('on-vault.yaml', 'utf-8')) as any;
