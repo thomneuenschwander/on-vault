@@ -34,10 +34,11 @@ export default defineConfig({
   mdxOptions: {
     remarkPlugins: [remarkMath],
     rehypePlugins: (v) => [rehypeKatex, ...v],
-    // Prevent remarkImage from converting relative image paths to static module
-    // imports — imported MDX files resolve to React components (functions), which
-    // can't be passed as `src` across the Server→Client boundary to next/image.
-    // All vault images use absolute /vault/... URLs so static imports aren't needed.
-    remarkImageOptions: { useImport: false },
+    // Prevent remarkImage from importing images as modules: fumadocs-obsidian can
+    // emit relative .mdx paths as image URLs (for excalidraw embeds) which, when
+    // imported, resolve to React component functions — crashing RSC serialization.
+    // onError:'ignore' silently skips files that aren't images (MDX, SVG) instead
+    // of throwing; all vault images use absolute /vault/... URLs anyway.
+    remarkImageOptions: { useImport: false, onError: 'ignore' },
   },
 });
