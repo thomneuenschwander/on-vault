@@ -28,27 +28,28 @@ jobs:
       - name: Install Vercel CLI
         run: npm install --global vercel@latest
 
-      # Downloads production env vars from Vercel dashboard into
-      # .vercel/.env.production.local. Google credentials live only in Vercel —
-      # they are never duplicated as GitHub secrets.
-      - name: Pull Vercel environment
+      # Pull project config (.vercel/project.json) so vercel build and
+      # vercel deploy know which Vercel project they are targeting.
+      - name: Pull Vercel project config
         run: vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
         env:
           VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
           VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
 
-      # vercel build running outside Vercel infrastructure does not inject
-      # the pulled vars into child processes automatically — export them first.
-      - name: Inject Vercel env vars into runner
-        run: grep -v '^#' .vercel/.env.production.local | grep '=' >> $GITHUB_ENV
-
-      # Runs the project's build command (fetch-content → fumadocs-mdx → next build)
-      # using the env vars injected above. Output goes to .vercel/output/.
+      # Build runs on the GitHub Actions runner (not Vercel servers), so
+      # Vercel "sensitive" env vars are not available via vercel pull.
+      # Pass them explicitly from GitHub secrets instead.
       - name: Build
         run: vercel build --prod --token=${{ secrets.VERCEL_TOKEN }}
         env:
           VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
           VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+          GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
+          GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+          GOOGLE_REFRESH_TOKEN: ${{ secrets.GOOGLE_REFRESH_TOKEN }}
+          DRIVE_FOLDER_ID: ${{ secrets.DRIVE_FOLDER_ID }}
+          NEXT_PUBLIC_BASE_PATH: ${{ secrets.NEXT_PUBLIC_BASE_PATH }}
+          NEXT_PUBLIC_SITE_TITLE: ${{ secrets.NEXT_PUBLIC_SITE_TITLE }}
 
       - name: Deploy
         run: vercel deploy --prebuilt --prod --token=${{ secrets.VERCEL_TOKEN }}
