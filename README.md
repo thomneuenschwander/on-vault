@@ -6,17 +6,17 @@ Publish your [Obsidian](https://obsidian.md) vault as a documentation site. Note
 
 ```
 Obsidian Vault (local)
-      ↕  npm run sync
+      ↕  npm run sync          push vault → Google Drive
 Google Drive folder
-      ↓  npm run build (at deploy time)
+      ↓  npm run build         fetch from Drive → build site
 fumadocs-obsidian
       ↓
-Published site
+Published site (Vercel)
 ```
 
 1. **Sync** — push your vault to Google Drive with `npm run sync`
-2. **Build** — at deploy time, notes are downloaded from Drive, processed by `fumadocs-obsidian` (wikilinks, callouts, embeds, LaTeX) and built with Fumadocs/Next.js
-3. **Never in git** — `content/` is gitignored; only your app code is in the repository
+2. **Build** — at deploy time, notes are downloaded from Drive, processed by `fumadocs-obsidian` and built with Fumadocs/Next.js
+3. **Never in git** — `content/` is gitignored; only your app code lives in the repository
 
 ## Supported Obsidian features
 
@@ -41,28 +41,56 @@ cd on-vault
 npm install
 ```
 
-### 2. Configure Google Drive
+### 2. Create a Google Drive folder
 
-You need a **Service Account** — it lets the build script authenticate with Drive without any interactive login, which works both locally and in CI/CD.
+Create a folder in your Google Drive where your vault will be synced. Copy the folder ID from the URL:
 
-1. Go to [Google Cloud Console](https://console.cloud.google.com/) → create a project (or use an existing one)
-2. Enable the **Google Drive API**: APIs & Services → Enable APIs → search "Google Drive API"
-3. Create a Service Account: IAM & Admin → Service Accounts → Create Service Account
-4. Create a JSON key: click the service account → Keys → Add Key → JSON → download the file
-5. In Google Drive, create a folder for your vault and **share it** with the service account email (e.g. `your-sa@your-project.iam.gserviceaccount.com`) with Editor access
-6. Copy the folder ID from the URL: `drive.google.com/drive/folders/<FOLDER_ID>`
+```
+drive.google.com/drive/folders/<FOLDER_ID>
+```
 
-### 3. Create your config files
+### 3. Set up Google authentication
+
+**Option A: OAuth2 — personal Google accounts (recommended)**
+
+1. Go to [Google Cloud Console](https://console.cloud.google.com/) → APIs & Services → Credentials
+2. Enable the **Google Drive API**: APIs & Services → Library → search "Google Drive API"
+3. Create credentials → **OAuth 2.0 Client ID** → Application type: **Desktop app**
+4. Copy the client ID and client secret
+5. Add them to `.env` (copy from `.env.example` first):
+   ```
+   GOOGLE_CLIENT_ID=your-client-id.apps.googleusercontent.com
+   GOOGLE_CLIENT_SECRET=your-client-secret
+   ```
+6. Run the auth command — opens a browser, you log in once, refresh token is saved automatically:
+   ```bash
+   npm run auth
+   ```
+
+**Option B: Service Account — Google Workspace Shared Drives only**
+
+Service accounts cannot write to personal Google Drive (no storage quota). Use this only if you have a Google Workspace Shared Drive.
+
+1. IAM & Admin → Service Accounts → Create Service Account
+2. Create a JSON key → download the file
+3. Share the Drive folder with the service account email (Editor access)
+4. Paste the JSON contents as a single line in `.env`:
+   ```
+   GOOGLE_SERVICE_ACCOUNT_JSON={"type":"service_account",...}
+   ```
+
+### 4. Create your config files
 
 **`on-vault.yaml`** (copy from `on-vault.yaml.example`):
 
 ```yaml
 site:
   title: My Knowledge Base
-  base_path: docs         # URL: /docs/*, content folder: content/docs/
+  base_path: docs           # URL prefix (/docs/*) and content folder name
 
 vault:
   path: ~/Documents/MyVault
+  # sync_config: true       # also sync .obsidian/ folder (plugins, themes, hotkeys)
 
 google_drive:
   folder_id: YOUR_FOLDER_ID_HERE
@@ -71,34 +99,24 @@ google_drive:
 **`.env`** (copy from `.env.example`):
 
 ```
-GOOGLE_SERVICE_ACCOUNT_JSON={"type":"service_account","project_id":"...","private_key":"...","client_email":"..."}
+GOOGLE_CLIENT_ID=your-client-id.apps.googleusercontent.com
+GOOGLE_CLIENT_SECRET=your-client-secret
+GOOGLE_REFRESH_TOKEN=       # filled automatically by: npm run auth
+
+DRIVE_FOLDER_ID=YOUR_FOLDER_ID_HERE
+NEXT_PUBLIC_BASE_PATH=docs
+NEXT_PUBLIC_SITE_TITLE=My Knowledge Base
 ```
 
-Paste the entire JSON key file contents as a single line.
-
-### 4. Sync your vault to Drive
+### 5. Sync your vault to Drive
 
 ```bash
 npm run sync
 ```
 
-Output:
-```
-Syncing ~/Documents/MyVault → Google Drive
-Local: 142 files
-Fetching Drive file list...
-Drive: 0 files
+Only new or modified files are uploaded. Add `--force` to re-upload everything regardless of modification time.
 
-  + notes/2024-01-01.md
-  + research/quantum.md
-  ...
-
-Done: 142 uploaded, 0 updated, 0 deleted, 0 unchanged
-```
-
-Re-run this command whenever you want to push local changes to Drive. Only new or modified files are uploaded.
-
-### 5. Run locally
+### 6. Run locally
 
 ```bash
 npm run fetch   # download notes from Drive → content/
@@ -111,104 +129,105 @@ Open [http://localhost:3000](http://localhost:3000).
 
 ## Configuration reference
 
-All options live in `on-vault.yaml`:
+**`on-vault.yaml`**
 
-| Key | Description | Default |
-|---|---|---|
-| `site.title` | Site title shown in the header | — |
-| `site.base_path` | URL prefix and content folder name | `docs` |
-| `vault.path` | Absolute or `~`-relative path to your local Obsidian vault | — |
-| `google_drive.folder_id` | ID of the shared Drive folder | — |
+| Key | Description |
+|---|---|
+| `site.title` | Site title shown in the header |
+| `site.base_path` | URL prefix and content folder name (default: `docs`) |
+| `vault.path` | Absolute or `~`-relative path to your local Obsidian vault |
+| `vault.sync_config` | Also sync `.obsidian/` settings — plugins, themes, hotkeys (default: `false`) |
+| `google_drive.folder_id` | ID of the Google Drive folder |
 
-### Changing `base_path`
+**`.env` / environment variables**
 
-Setting `base_path: notes` means your notes are served at `/notes/*`. The Next.js app internally keeps its route at `/docs/` and a transparent rewrite handles the mapping — no code changes needed.
-
----
-
-## Deploying
-
-### Vercel (recommended)
-
-1. Push your repo to GitHub
-2. Import the project in [Vercel](https://vercel.com)
-3. Add the environment variable:
-   - `GOOGLE_SERVICE_ACCOUNT_JSON` → your service account JSON (single line)
-4. Add build configuration in Vercel project settings:
-   - **Build Command:** `npm run build`
-   - **Output Directory:** `.next`
-5. Deploy — Vercel will run `fetch` + `fumadocs-mdx` + `next build` automatically
-
-Every time you push code, Vercel redeploys. To rebuild with updated notes, trigger a manual redeploy or set up a webhook.
-
-### Other platforms
-
-See `.github/workflows/deploy.yml` for a generic GitHub Actions example that builds the site and uploads the artifact. Adapt the final deploy step to your platform (Netlify, GitHub Pages, self-hosted, etc.).
+| Variable | Description |
+|---|---|
+| `GOOGLE_CLIENT_ID` | OAuth2 client ID |
+| `GOOGLE_CLIENT_SECRET` | OAuth2 client secret |
+| `GOOGLE_REFRESH_TOKEN` | OAuth2 refresh token (set by `npm run auth`) |
+| `GOOGLE_SERVICE_ACCOUNT_JSON` | Service account JSON (alternative to OAuth2) |
+| `DRIVE_FOLDER_ID` | Drive folder ID — used by the build pipeline when `on-vault.yaml` is absent (e.g. CI) |
+| `NEXT_PUBLIC_BASE_PATH` | URL prefix — must match `site.base_path` in `on-vault.yaml` |
+| `NEXT_PUBLIC_SITE_TITLE` | Site title — must match `site.title` in `on-vault.yaml` |
 
 ---
 
-## GitHub Actions
+## Deploying to Vercel
 
-A workflow that rebuilds and deploys on every push to `main`:
+### 1. Set environment variables in Vercel
 
-```yaml
-# .github/workflows/deploy.yml
-name: Deploy
+Vercel Dashboard → Project → Settings → Environment Variables:
 
-on:
-  push:
-    branches: [main]
-  workflow_dispatch:   # allow manual trigger to rebuild with new notes
+| Variable | Value |
+|---|---|
+| `GOOGLE_CLIENT_ID` | your OAuth2 client ID |
+| `GOOGLE_CLIENT_SECRET` | your OAuth2 client secret |
+| `GOOGLE_REFRESH_TOKEN` | your refresh token |
+| `DRIVE_FOLDER_ID` | your Drive folder ID |
+| `NEXT_PUBLIC_BASE_PATH` | e.g. `docs` or `notes` |
+| `NEXT_PUBLIC_SITE_TITLE` | e.g. `My Knowledge Base` |
 
-jobs:
-  deploy:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
+### 2. Add GitHub secrets
 
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: npm
+GitHub repo → Settings → Secrets and variables → Actions:
 
-      - run: npm ci
+| Secret | Where to get it |
+|---|---|
+| `VERCEL_TOKEN` | Vercel Dashboard → Account Settings → Tokens |
+| `VERCEL_ORG_ID` | `.vercel/project.json` → `orgId` (after `npx vercel link`) |
+| `VERCEL_PROJECT_ID` | `.vercel/project.json` → `projectId` |
+| `GOOGLE_CLIENT_ID` | same as Vercel env vars above |
+| `GOOGLE_CLIENT_SECRET` | same as Vercel env vars above |
+| `GOOGLE_REFRESH_TOKEN` | same as Vercel env vars above |
+| `DRIVE_FOLDER_ID` | same as Vercel env vars above |
+| `NEXT_PUBLIC_BASE_PATH` | same as Vercel env vars above |
+| `NEXT_PUBLIC_SITE_TITLE` | same as Vercel env vars above |
 
-      - name: Build
-        env:
-          GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
-        run: npm run build
-
-      # Replace this step with your platform's deploy action
-      - name: Deploy to Vercel
-        uses: amondnet/vercel-action@v25
-        with:
-          vercel-token: ${{ secrets.VERCEL_TOKEN }}
-          vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
-          vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID }}
-          vercel-args: --prod
-```
-
-Add `GOOGLE_SERVICE_ACCOUNT_JSON` as a repository secret in GitHub → Settings → Secrets and variables → Actions.
-
----
-
-## Local development workflow
+### 3. Link the project to Vercel
 
 ```bash
-# First time
-cp on-vault.yaml.example on-vault.yaml   # fill in your config
-cp .env.example .env                      # paste your service account JSON
-npm install
-npm run sync                              # push vault to Drive
-
-# Day-to-day (after editing notes in Obsidian)
-npm run sync                              # push changes to Drive
-npm run fetch && npm run dev              # preview locally
-
-# To deploy
-git push origin main                      # triggers Vercel redeploy
-# or: trigger a manual redeploy in Vercel dashboard
+npx vercel link
 ```
+
+Creates `.vercel/project.json` with `orgId` and `projectId`. Then disable Vercel's automatic GitHub deployments to avoid double builds — the GitHub Actions workflow handles all deploys:
+
+Vercel Dashboard → Project → Settings → Git → Ignored Build Step: `exit 0`
+
+### 4. Push and deploy
+
+```bash
+git push origin main
+```
+
+The GitHub Actions workflow runs automatically on every push to `main`.
+
+---
+
+## Rebuilding with new notes
+
+When you sync notes with `npm run sync`, the published site does not update automatically (notes are not in git). To trigger a rebuild:
+
+**Manual:** GitHub → Actions → Deploy → Run workflow
+
+**Automated (optional):**
+
+```bash
+alias vault-publish='npm run sync && gh workflow run deploy.yml'
+```
+
+---
+
+## npm scripts
+
+| Command | What it does |
+|---|---|
+| `npm run sync` | Upload local vault → Google Drive (diff by mtime) |
+| `npm run sync -- --force` | Re-upload all files regardless of modification time |
+| `npm run fetch` | Download Drive → `content/` (via fumadocs-obsidian) |
+| `npm run build` | fetch + fumadocs-mdx + next build (full deploy pipeline) |
+| `npm run dev` | Next.js dev server (run `fetch` first) |
+| `npm run auth` | One-time OAuth2 browser login, saves refresh token to `.env` |
 
 ---
 
@@ -216,10 +235,10 @@ git push origin main                      # triggers Vercel redeploy
 
 | | |
 |---|---|
-| Framework | [Next.js 16](https://nextjs.org) |
+| Framework | [Next.js](https://nextjs.org) |
 | Docs UI | [Fumadocs](https://fumadocs.dev) |
 | Obsidian processing | [fumadocs-obsidian](https://fumadocs.dev/docs/integrations/obsidian) |
 | Math rendering | [KaTeX](https://katex.org) via remark-math + rehype-katex |
-| Storage | Google Drive (Service Account auth) |
-| Config | YAML (`on-vault.yaml`) + `.env` |
+| Storage | Google Drive (OAuth2 or Service Account) |
+| Config | `on-vault.yaml` + `.env` |
 | Scripts | TypeScript via [tsx](https://github.com/privatenumber/tsx) |
