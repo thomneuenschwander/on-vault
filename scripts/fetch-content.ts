@@ -1,5 +1,5 @@
 import 'dotenv/config';
-import { writeFileSync, mkdirSync, rmSync, existsSync } from 'fs';
+import { writeFileSync, mkdirSync, rmSync, existsSync, readdirSync } from 'fs';
 import { join, dirname } from 'path';
 import {
   createDriveClient,
@@ -63,6 +63,13 @@ async function fetchContent() {
       url: (outputPath) => `/vault/${outputPath}`,
     },
   });
+
+  // Log how many MDX files fromVault() actually generated
+  const mdxFiles = readdirSync(contentDir, { recursive: true }).filter(
+    (f) => typeof f === 'string' && f.endsWith('.mdx')
+  );
+  console.log(`fromVault() generated ${mdxFiles.length} MDX files`);
+  if (mdxFiles.length > 0) mdxFiles.slice(0, 5).forEach((f) => console.log(`  - ${f}`));
 
   // Generate a default landing page if the vault has no index.md
   const indexPath = join(contentDir, 'index.mdx');

@@ -51,6 +51,15 @@ jobs:
           NEXT_PUBLIC_BASE_PATH: ${{ secrets.NEXT_PUBLIC_BASE_PATH }}
           NEXT_PUBLIC_SITE_TITLE: ${{ secrets.NEXT_PUBLIC_SITE_TITLE }}
 
+      - name: Debug build output
+        run: |
+          echo "=== content/ subdirs ==="
+          ls content/ 2>/dev/null || echo "(no content/)"
+          echo "=== MDX count per subdir ==="
+          for d in content/*/; do echo "$d: $(find "$d" -name '*.mdx' | wc -l) mdx files"; done 2>/dev/null || true
+          echo "=== Vercel static output (docs) ==="
+          find .vercel/output/static -name "*.html" 2>/dev/null | head -20 || echo "(no static html)"
+
       - name: Deploy
         run: vercel deploy --prebuilt --prod --token=${{ secrets.VERCEL_TOKEN }}
         env:
