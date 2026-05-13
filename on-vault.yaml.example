@@ -11,9 +11,29 @@ vault:
   # workspace.json is always excluded (pure UI state, changes on every Obsidian open).
   # sync_config: false
 
+  # Glob patterns for files to exclude from publishing (synced to storage but not built into the site).
+  # Supports * (single segment) and ** (any depth).
+  # exclude:
+  #   - "**/*.excalidraw.md"    # Excalidraw drawings (no renderer — would appear as raw JSON)
+  #   - "attachments/agents/**" # Private agent context/skill files
+
+storage:
+  # Storage provider for vault sync and fetch. Options: google_drive (default), s3
+  provider: google_drive
+  # Set to false to disable vault→storage uploads (npm run sync becomes a no-op).
+  # Fetch (npm run fetch / npm run build) still works normally.
+  # sync_enabled: true
+
+# ── Google Drive ────────────────────────────────────────────────────────────────
 google_drive:
   # ID of the Google Drive folder to sync your vault with.
   # Find it in the URL: drive.google.com/drive/folders/<folder_id>
   # Not a secret — but also set DRIVE_FOLDER_ID in .env so the build pipeline
   # can access it on Vercel (where on-vault.yaml is not present).
   folder_id: YOUR_GOOGLE_DRIVE_FOLDER_ID
+
+# ── AWS S3 (set storage.provider: s3 to use) ────────────────────────────────────
+# s3:
+#   bucket: my-vault-bucket
+#   prefix: vault/       # optional key prefix inside the bucket
+#   region: us-east-1    # falls back to AWS_REGION env var

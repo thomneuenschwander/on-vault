@@ -28,6 +28,7 @@ Published site (Vercel)
 | `$...$` / `$$...$$` LaTeX | Rendered with KaTeX |
 | Nested folder structure | Preserved as URL hierarchy |
 | Frontmatter | Passed through; `title` used for page heading |
+| Excalidraw drawings | Not rendered — add `"**/*.excalidraw.md"` to `vault.exclude` |
 
 ---
 
@@ -137,7 +138,13 @@ Open [http://localhost:3000](http://localhost:3000).
 | `site.base_path` | URL prefix and content folder name (default: `docs`) |
 | `vault.path` | Absolute or `~`-relative path to your local Obsidian vault |
 | `vault.sync_config` | Also sync `.obsidian/` settings — plugins, themes, hotkeys (default: `false`) |
+| `vault.exclude` | Glob patterns for files to exclude from publishing (still synced to storage) |
+| `storage.provider` | Storage backend: `google_drive` (default) or `s3` |
+| `storage.sync_enabled` | Set `false` to disable vault→storage uploads; fetch still works (default: `true`) |
 | `google_drive.folder_id` | ID of the Google Drive folder |
+| `s3.bucket` | S3 bucket name |
+| `s3.prefix` | Optional key prefix inside the bucket (e.g. `vault/`) |
+| `s3.region` | AWS region (falls back to `AWS_REGION` env var) |
 
 **`.env` / environment variables**
 
@@ -147,7 +154,14 @@ Open [http://localhost:3000](http://localhost:3000).
 | `GOOGLE_CLIENT_SECRET` | OAuth2 client secret |
 | `GOOGLE_REFRESH_TOKEN` | OAuth2 refresh token (set by `npm run auth`) |
 | `GOOGLE_SERVICE_ACCOUNT_JSON` | Service account JSON (alternative to OAuth2) |
-| `DRIVE_FOLDER_ID` | Drive folder ID — used by the build pipeline when `on-vault.yaml` is absent (e.g. CI) |
+| `DRIVE_FOLDER_ID` | Drive folder ID — used when `on-vault.yaml` is absent (e.g. CI) |
+| `S3_BUCKET` | S3 bucket name — used when `on-vault.yaml` is absent |
+| `S3_PREFIX` | Optional S3 key prefix — used when `on-vault.yaml` is absent |
+| `AWS_REGION` | AWS region |
+| `AWS_ACCESS_KEY_ID` | AWS access key |
+| `AWS_SECRET_ACCESS_KEY` | AWS secret key |
+| `STORAGE_PROVIDER` | `google_drive` or `s3` — used when `on-vault.yaml` is absent |
+| `STORAGE_SYNC_ENABLED` | Set `false` to disable uploads — used when `on-vault.yaml` is absent |
 | `NEXT_PUBLIC_BASE_PATH` | URL prefix — must match `site.base_path` in `on-vault.yaml` |
 | `NEXT_PUBLIC_SITE_TITLE` | Site title — must match `site.title` in `on-vault.yaml` |
 

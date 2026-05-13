@@ -1,12 +1,30 @@
 import 'dotenv/config';
 import { writeFileSync, mkdirSync, rmSync, existsSync, readdirSync } from 'fs';
 import { join, dirname } from 'path';
-import {
-  createDriveClient,
-  listDriveFolder,
-  downloadFile,
-} from './drive';
 import { loadConfig } from './config';
+import { createStorageProvider } from './storage';
+
+// Simple glob matcher supporting * (single segment) and ** (any depth).
+function matchesGlob(filePath: string, pattern: string): boolean {
+  const regexStr = pattern
+    .replace(/[.+^${}()|[\]\\]/g, '\\$&') // escape regex special chars except *
+    .replace(/\*\*\//g, '(.+/)?')          // **/ → optional path prefix
+    .replace(/\*\*/g, '.*')                // ** → any depth
+    .replace(/\*/g, '[^/]*');              // * → single path segment
+  return new RegExp(`^${regexStr}$`).test(filePath);
+}
+
+function applyExcludePatterns(allFiles: Map<string, unknown>, patterns: string[]): void {
+  if (patterns.length === 0) return;
+  let excluded = 0;
+  for (const relativePath of allFiles.keys()) {
+    if (patterns.some((p) => matchesGlob(relativePath, p))) {
+      allFiles.delete(relativePath);
+      excluded++;
+    }
+  }
+  if (excluded > 0) console.log(`Excluded ${excluded} file(s) matching vault.exclude patterns\n`);
+}
 
 function generateDefaultIndex(title: string): string {
   return `---
@@ -31,18 +49,19 @@ async function fetchContent() {
     mkdirSync(dir, { recursive: true });
   }
 
-  const drive = createDriveClient();
+  const provider = await createStorageProvider(config);
 
-  console.log(`Fetching vault from Google Drive...`);
+  console.log(`Fetching vault from ${provider.name}...`);
 
-  const allFiles = new Map();
-  await listDriveFolder(drive, config.google_drive.folder_id, '', allFiles);
-  console.log(`Found ${allFiles.size} files in Drive\n`);
+  const allFiles = await provider.listFiles();
+  console.log(`Found ${allFiles.size} files`);
+
+  applyExcludePatterns(allFiles, config.vault.exclude ?? []);
 
   for (const [relativePath, file] of allFiles) {
     const targetPath = join(vaultCacheDir, relativePath);
     mkdirSync(dirname(targetPath), { recursive: true });
-    const content = await downloadFile(drive, file.id);
+    const content = await provider.downloadFile(file.id);
     writeFileSync(targetPath, content);
     console.log(`  > ${relativePath}`);
   }
@@ -59,7 +78,6 @@ async function fetchContent() {
       publicDir: publicVaultDir,
     },
     convert: {
-      // make asset URLs resolve under /vault/
       url: (outputPath) => `/vault/${outputPath}`,
     },
   });

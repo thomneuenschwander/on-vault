@@ -1,15 +1,9 @@
 import 'dotenv/config';
 import { readFileSync, statSync, readdirSync } from 'fs';
-import { Readable } from 'stream';
 import { join, relative, dirname } from 'path';
 import { homedir } from 'os';
-import {
-  createDriveClient,
-  listDriveFolder,
-  ensureFolderPath,
-  type DriveFile,
-} from './drive';
 import { loadConfig } from './config';
+import { createStorageProvider } from './storage';
 
 const BINARY_EXTENSIONS = new Set([
   'png', 'jpg', 'jpeg', 'gif', 'webp', 'ico', 'bmp', 'tiff', 'tif',
@@ -30,13 +24,10 @@ const MIME_MAP: Record<string, string> = {
   excalidraw: 'application/json',
 };
 
-function getFileMedia(absolutePath: string, filename: string): { mimeType: string; body: string | Readable } {
+function getFileContent(absolutePath: string, filename: string): { mimeType: string; content: Buffer } {
   const ext = filename.toLowerCase().split('.').pop() ?? '';
   const mimeType = MIME_MAP[ext] ?? (BINARY_EXTENSIONS.has(ext) ? 'application/octet-stream' : 'text/plain; charset=utf-8');
-  if (BINARY_EXTENSIONS.has(ext)) {
-    return { mimeType, body: Readable.from(readFileSync(absolutePath)) };
-  }
-  return { mimeType, body: readFileSync(absolutePath, 'utf-8') };
+  return { mimeType, content: readFileSync(absolutePath) };
 }
 
 interface LocalFile {
@@ -54,55 +45,49 @@ const ALWAYS_SKIP = new Set(['.trash', 'workspace.json', 'workspace-mobile.json'
 
 function collectLocalFiles(dirPath: string, vaultRoot: string, syncConfig: boolean): LocalFile[] {
   const files: LocalFile[] = [];
-
   let entries;
   try {
     entries = readdirSync(dirPath, { withFileTypes: true });
   } catch {
     return files;
   }
-
   for (const entry of entries) {
     if (ALWAYS_SKIP.has(entry.name)) continue;
     if (!syncConfig && entry.name.startsWith('.')) continue;
-
     const absolutePath = join(dirPath, entry.name);
-
     if (entry.isDirectory()) {
       files.push(...collectLocalFiles(absolutePath, vaultRoot, syncConfig));
     } else if (entry.isFile()) {
-      files.push({
-        absolutePath,
-        relativePath: relative(vaultRoot, absolutePath),
-        name: entry.name,
-      });
+      files.push({ absolutePath, relativePath: relative(vaultRoot, absolutePath), name: entry.name });
     }
   }
-
   return files;
 }
 
 async function sync() {
   const config = loadConfig();
+
+  if (config.storage?.sync_enabled === false) {
+    console.log('Sync is disabled (storage.sync_enabled: false). Skipping upload.');
+    return;
+  }
+
   const vaultPath = expandPath(config.vault.path);
-  const rootFolderId = config.google_drive.folder_id;
   const force = process.argv.includes('--force');
   const syncConfig = config.vault.sync_config ?? false;
 
-  const drive = createDriveClient();
+  const provider = await createStorageProvider(config);
 
-  console.log(`Syncing ${vaultPath} → Google Drive${force ? ' (--force)' : ''}${syncConfig ? ' (including .obsidian)' : ''}`);
+  console.log(`Syncing ${vaultPath} → ${provider.name}${force ? ' (--force)' : ''}${syncConfig ? ' (including .obsidian)' : ''}`);
 
   const localFiles = collectLocalFiles(vaultPath, vaultPath, syncConfig);
   console.log(`Local: ${localFiles.length} files`);
 
-  console.log('Fetching Drive file list...');
-  const driveFileMap = new Map<string, DriveFile>();
-  await listDriveFolder(drive, rootFolderId, '', driveFileMap);
-  console.log(`Drive: ${driveFileMap.size} files\n`);
+  console.log(`Fetching ${provider.name} file list...`);
+  const remoteFiles = await provider.listFiles();
+  console.log(`Remote: ${remoteFiles.size} files\n`);
 
   const localPathSet = new Set(localFiles.map((f) => f.relativePath));
-  const folderCache = new Map<string, string>();
 
   let uploaded = 0;
   let updated = 0;
@@ -110,31 +95,17 @@ async function sync() {
   let unchanged = 0;
 
   for (const localFile of localFiles) {
-    const driveFile = driveFileMap.get(localFile.relativePath);
+    const remoteFile = remoteFiles.get(localFile.relativePath);
     const localMtime = statSync(localFile.absolutePath).mtime;
 
-    if (!driveFile) {
-      const parentId = await ensureFolderPath(
-        drive,
-        dirname(localFile.relativePath),
-        rootFolderId,
-        folderCache
-      );
-      const { mimeType, body } = getFileMedia(localFile.absolutePath, localFile.name);
-      await drive.files.create({
-        requestBody: { name: localFile.name, parents: [parentId] },
-        media: { mimeType, body },
-        supportsAllDrives: true,
-      });
+    if (!remoteFile) {
+      const { mimeType, content } = getFileContent(localFile.absolutePath, localFile.name);
+      await provider.uploadFile(localFile.relativePath, content, localMtime, mimeType, null);
       console.log(`  + ${localFile.relativePath}`);
       uploaded++;
-    } else if (force || localMtime > new Date(driveFile.modifiedTime)) {
-      const { mimeType, body } = getFileMedia(localFile.absolutePath, localFile.name);
-      await drive.files.update({
-        fileId: driveFile.id,
-        media: { mimeType, body },
-        supportsAllDrives: true,
-      });
+    } else if (force || localMtime > remoteFile.mtime) {
+      const { mimeType, content } = getFileContent(localFile.absolutePath, localFile.name);
+      await provider.uploadFile(localFile.relativePath, content, localMtime, mimeType, remoteFile.id);
       console.log(`  ~ ${localFile.relativePath}`);
       updated++;
     } else {
@@ -142,17 +113,15 @@ async function sync() {
     }
   }
 
-  for (const [relativePath, driveFile] of driveFileMap) {
+  for (const [relativePath, remoteFile] of remoteFiles) {
     if (!localPathSet.has(relativePath)) {
-      await drive.files.delete({ fileId: driveFile.id, supportsAllDrives: true });
+      await provider.deleteFile(remoteFile.id);
       console.log(`  - ${relativePath}`);
       deleted++;
     }
   }
 
-  console.log(
-    `\nDone: ${uploaded} uploaded, ${updated} updated, ${deleted} deleted, ${unchanged} unchanged`
-  );
+  console.log(`\nDone: ${uploaded} uploaded, ${updated} updated, ${deleted} deleted, ${unchanged} unchanged`);
 }
 
 sync().catch((err) => {
